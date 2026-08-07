@@ -132,13 +132,7 @@ export function ReadingEditorPage() {
         </Card>
 
         <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold">Cards</h3>
-            <Button type="button" variant="outline" onClick={addSpreadCard}>
-              <Plus className="h-4 w-4" />
-              Add Card
-            </Button>
-          </div>
+          <h3 className="text-xl font-semibold">Cards</h3>
 
           <div className="space-y-3">
             {spreadCards.map((item, index) => (
@@ -181,6 +175,13 @@ export function ReadingEditorPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={addSpreadCard}>
+              <Plus className="h-4 w-4" />
+              Add Card
+            </Button>
           </div>
         </section>
 

@@ -321,11 +321,9 @@ export async function getReading(id: string): Promise<ReadingWithCards | null> {
 
 export async function saveReading(input: ReadingInput, cards: ReadingCardInput[], readingId?: string): Promise<Reading> {
   if (supabase) {
-    const { data, error } = await supabase
-      .from("readings")
-      .upsert({ ...input, id: readingId })
-      .select()
-      .single();
+    const { data, error } = readingId
+      ? await supabase.from("readings").update(input).eq("id", readingId).select().single()
+      : await supabase.from("readings").insert(input).select().single();
     if (error) throw error;
 
     const { error: deleteError } = await supabase.from("reading_cards").delete().eq("reading_id", data.id);
@@ -346,10 +344,11 @@ export async function saveReading(input: ReadingInput, cards: ReadingCardInput[]
   }
 
   const store = getLocalStore();
+  const existingReading = readingId ? store.readings.find((item) => item.id === readingId) : null;
   const reading: Reading = {
     ...input,
     id: readingId ?? id("reading"),
-    created_at: new Date().toISOString(),
+    created_at: existingReading?.created_at ?? new Date().toISOString(),
   };
   const retainedReadings = store.readings.filter((item) => item.id !== reading.id);
   const retainedCards = store.reading_cards.filter((item) => item.reading_id !== reading.id);

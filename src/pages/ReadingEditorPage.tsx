@@ -1,4 +1,4 @@
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Search, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,22 +6,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { getReading, listCards, saveReading } from "@/lib/repository";
+import { cardMatchesSearch, getReading, listCards, saveReading } from "@/lib/repository";
 import type { Card as TarotCard, Orientation } from "@/types/database";
 
 type SpreadCardForm = {
   position_name: string;
   card_id: string;
+  card_search: string;
   orientation: Orientation;
   interpretation: string;
 };
 
 const today = new Date().toISOString().slice(0, 10);
 
-function blankSpreadCard(cardId = ""): SpreadCardForm {
+function blankSpreadCard(cardId = "", cardSearch = ""): SpreadCardForm {
   return {
     position_name: "",
     card_id: cardId,
+    card_search: cardSearch,
     orientation: "upright",
     interpretation: "",
   };
@@ -33,12 +35,13 @@ export function ReadingEditorPage() {
   const [cards, setCards] = useState<TarotCard[]>([]);
   const [form, setForm] = useState({ title: "", date: today, question: "", overall_notes: "" });
   const [spreadCards, setSpreadCards] = useState<SpreadCardForm[]>([blankSpreadCard()]);
+  const [activeCardSearchIndex, setActiveCardSearchIndex] = useState<number | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
     void listCards().then((result) => {
       setCards(result);
-      if (!id && result[0]) setSpreadCards([blankSpreadCard(result[0].id)]);
+      if (!id && result[0]) setSpreadCards([blankSpreadCard(result[0].id, result[0].name)]);
     });
   }, [id]);
 
@@ -56,6 +59,7 @@ export function ReadingEditorPage() {
         reading.reading_cards.map((item) => ({
           position_name: item.position_name,
           card_id: item.card_id,
+          card_search: item.cards.name,
           orientation: item.orientation,
           interpretation: item.interpretation ?? "",
         })),
@@ -68,15 +72,35 @@ export function ReadingEditorPage() {
   }
 
   function addSpreadCard() {
-    setSpreadCards((current) => [...current, blankSpreadCard(cards[0]?.id ?? "")]);
+    setSpreadCards((current) => [...current, blankSpreadCard(cards[0]?.id ?? "", cards[0]?.name ?? "")]);
   }
 
   function removeSpreadCard(index: number) {
     setSpreadCards((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  function getCardOptions(item: SpreadCardForm) {
+    return cards.filter((card) => cardMatchesSearch(card, item.card_search));
+  }
+
+  function updateCardSearch(index: number, value: string) {
+    const exactMatch = cards.find((card) => card.name.toLowerCase() === value.trim().toLowerCase());
+    updateSpreadCard(index, { card_search: value, card_id: exactMatch?.id ?? "" });
+  }
+
+  function selectCard(index: number, card: TarotCard) {
+    updateSpreadCard(index, { card_id: card.id, card_search: card.name });
+    setActiveCardSearchIndex(null);
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const hasUnselectedCard = spreadCards.some((item) => item.position_name.trim() && !item.card_id);
+    if (hasUnselectedCard) {
+      setStatus("Choose a card from the search results before saving.");
+      return;
+    }
+
     const reading = await saveReading(
       {
         title: form.title,
@@ -149,12 +173,38 @@ export function ReadingEditorPage() {
                   </label>
                   <label className="space-y-2 block">
                     <span className="field-label">Card</span>
-                    <Select required value={item.card_id} onChange={(event) => updateSpreadCard(index, { card_id: event.target.value })}>
-                      <option value="" disabled>Select a card</option>
-                      {cards.map((card) => (
-                        <option key={card.id} value={card.id}>{card.name}</option>
-                      ))}
-                    </Select>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        className="pl-9"
+                        placeholder="Search cards"
+                        required
+                        value={item.card_search}
+                        onChange={(event) => updateCardSearch(index, event.target.value)}
+                        onFocus={() => setActiveCardSearchIndex(index)}
+                        onBlur={() => setActiveCardSearchIndex(null)}
+                      />
+                      {activeCardSearchIndex === index && (
+                        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-md border bg-card py-1 shadow-lg">
+                          {getCardOptions(item).length ? (
+                            getCardOptions(item).map((card) => (
+                              <button
+                                key={card.id}
+                                type="button"
+                                className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => selectCard(index, card)}
+                              >
+                                <span className="font-medium">{card.name}</span>
+                                <span className="text-xs text-muted-foreground">{card.suit ?? card.arcana}</span>
+                              </button>
+                            ))
+                          ) : (
+                            <p className="px-3 py-2 text-sm text-muted-foreground">No cards found.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </label>
                   <label className="space-y-2 block">
                     <span className="field-label">Orientation</span>

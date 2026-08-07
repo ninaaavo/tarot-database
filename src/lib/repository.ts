@@ -114,7 +114,7 @@ function phraseMatchesSearch(phrase: string, term: string) {
   );
 }
 
-function cardMatchesSearch(card: Card, rawTerm: string) {
+export function cardMatchesSearch(card: Card, rawTerm: string) {
   const term = normalizeSearchText(rawTerm);
   if (!term) return true;
 

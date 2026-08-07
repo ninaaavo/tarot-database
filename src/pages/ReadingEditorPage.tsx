@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cardMatchesSearch, getReading, listCards, saveReading } from "@/lib/repository";
-import type { Card as TarotCard, Orientation } from "@/types/database";
+import { cardMatchesSearch, getReading, listCardsWithNotes, saveReading } from "@/lib/repository";
+import type { CardWithNotes, Orientation } from "@/types/database";
 
 type SpreadCardForm = {
   position_name: string;
@@ -18,6 +18,7 @@ type SpreadCardForm = {
 };
 
 const today = new Date().toISOString().slice(0, 10);
+const meaningFallbackCategories = ["Meaning", "Reversed Meaning", "Suggestion / Advice", "Action"];
 
 function blankSpreadCard(cardId = "", cardSearch = ""): SpreadCardForm {
   return {
@@ -32,14 +33,14 @@ function blankSpreadCard(cardId = "", cardSearch = ""): SpreadCardForm {
 export function ReadingEditorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [cards, setCards] = useState<TarotCard[]>([]);
+  const [cards, setCards] = useState<CardWithNotes[]>([]);
   const [form, setForm] = useState({ title: "", date: today, question: "", overall_notes: "" });
   const [spreadCards, setSpreadCards] = useState<SpreadCardForm[]>([blankSpreadCard()]);
   const [activeCardSearchIndex, setActiveCardSearchIndex] = useState<number | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    void listCards().then((result) => {
+    void listCardsWithNotes().then((result) => {
       setCards(result);
       if (!id && result[0]) setSpreadCards([blankSpreadCard(result[0].id, result[0].name)]);
     });
@@ -88,9 +89,23 @@ export function ReadingEditorPage() {
     updateSpreadCard(index, { card_search: value, card_id: exactMatch?.id ?? "" });
   }
 
-  function selectCard(index: number, card: TarotCard) {
+  function selectCard(index: number, card: CardWithNotes) {
     updateSpreadCard(index, { card_id: card.id, card_search: card.name });
     setActiveCardSearchIndex(null);
+  }
+
+  function getSelectedCard(item: SpreadCardForm) {
+    return cards.find((card) => card.id === item.card_id) ?? null;
+  }
+
+  function getMeaningNote(card: CardWithNotes, orientation: Orientation) {
+    const preferredCategory = orientation === "reversed" ? "Reversed Meaning" : "Meaning";
+    const preferredNote = card.card_notes.find((note) => note.category === preferredCategory && note.content.trim());
+    if (preferredNote) return preferredNote;
+
+    return meaningFallbackCategories
+      .map((category) => card.card_notes.find((note) => note.category === category && note.content.trim()))
+      .find((note) => Boolean(note));
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -159,72 +174,91 @@ export function ReadingEditorPage() {
           <h3 className="text-xl font-semibold">Cards</h3>
 
           <div className="space-y-3">
-            {spreadCards.map((item, index) => (
-              <Card key={index}>
-                <CardContent className="grid gap-4 p-5 lg:grid-cols-[1fr_1fr_160px_auto]">
-                  <label className="space-y-2 block">
-                    <span className="field-label">Position</span>
-                    <Input
-                      placeholder="Past, Present, Future..."
-                      required
-                      value={item.position_name}
-                      onChange={(event) => updateSpreadCard(index, { position_name: event.target.value })}
-                    />
-                  </label>
-                  <label className="space-y-2 block">
-                    <span className="field-label">Card</span>
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            {spreadCards.map((item, index) => {
+              const selectedCard = getSelectedCard(item);
+              const meaningNote = selectedCard ? getMeaningNote(selectedCard, item.orientation) : null;
+
+              return (
+                <Card key={index}>
+                  <CardContent className="grid gap-4 p-5 lg:grid-cols-[1fr_1fr_160px_auto]">
+                    <label className="space-y-2 block">
+                      <span className="field-label">Position</span>
                       <Input
-                        className="pl-9"
-                        placeholder="Search cards"
+                        placeholder="Past, Present, Future..."
                         required
-                        value={item.card_search}
-                        onChange={(event) => updateCardSearch(index, event.target.value)}
-                        onFocus={() => setActiveCardSearchIndex(index)}
-                        onBlur={() => setActiveCardSearchIndex(null)}
+                        value={item.position_name}
+                        onChange={(event) => updateSpreadCard(index, { position_name: event.target.value })}
                       />
-                      {activeCardSearchIndex === index && (
-                        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-md border bg-card py-1 shadow-lg">
-                          {getCardOptions(item).length ? (
-                            getCardOptions(item).map((card) => (
-                              <button
-                                key={card.id}
-                                type="button"
-                                className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => selectCard(index, card)}
-                              >
-                                <span className="font-medium">{card.name}</span>
-                                <span className="text-xs text-muted-foreground">{card.suit ?? card.arcana}</span>
-                              </button>
-                            ))
-                          ) : (
-                            <p className="px-3 py-2 text-sm text-muted-foreground">No cards found.</p>
-                          )}
-                        </div>
-                      )}
+                    </label>
+                    <label className="space-y-2 block">
+                      <span className="field-label">Card</span>
+                      <div className="group relative">
+                        <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          className="pl-9"
+                          placeholder="Search cards"
+                          required
+                          value={item.card_search}
+                          onChange={(event) => updateCardSearch(index, event.target.value)}
+                          onFocus={() => setActiveCardSearchIndex(index)}
+                          onBlur={() => setActiveCardSearchIndex(null)}
+                        />
+                        {activeCardSearchIndex === index && (
+                          <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-auto rounded-md border bg-card py-1 shadow-lg">
+                            {getCardOptions(item).length ? (
+                              getCardOptions(item).map((card) => (
+                                <button
+                                  key={card.id}
+                                  type="button"
+                                  className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => selectCard(index, card)}
+                                >
+                                  <span className="font-medium">{card.name}</span>
+                                  <span className="text-xs text-muted-foreground">{card.suit ?? card.arcana}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <p className="px-3 py-2 text-sm text-muted-foreground">No cards found.</p>
+                            )}
+                          </div>
+                        )}
+                        {selectedCard && activeCardSearchIndex !== index && (
+                          <div className="pointer-events-none absolute left-0 right-0 top-full z-20 mt-2 hidden rounded-lg border bg-card p-4 text-left shadow-xl group-hover:block group-focus-within:block">
+                            <p className="text-sm font-semibold">{selectedCard.name}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{selectedCard.suit ?? selectedCard.arcana}</p>
+                            {meaningNote ? (
+                              <div className="mt-3">
+                                <p className="text-xs font-semibold uppercase text-muted-foreground">{meaningNote.category}</p>
+                                <p className="mt-1 line-clamp-6 text-sm leading-5">{meaningNote.content}</p>
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-sm text-muted-foreground">No meaning saved yet.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                    <label className="space-y-2 block">
+                      <span className="field-label">Orientation</span>
+                      <Select value={item.orientation} onChange={(event) => updateSpreadCard(index, { orientation: event.target.value as Orientation })}>
+                        <option value="upright">Upright</option>
+                        <option value="reversed">Reversed</option>
+                      </Select>
+                    </label>
+                    <div className="flex items-end">
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeSpreadCard(index)} aria-label="Remove card">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </label>
-                  <label className="space-y-2 block">
-                    <span className="field-label">Orientation</span>
-                    <Select value={item.orientation} onChange={(event) => updateSpreadCard(index, { orientation: event.target.value as Orientation })}>
-                      <option value="upright">Upright</option>
-                      <option value="reversed">Reversed</option>
-                    </Select>
-                  </label>
-                  <div className="flex items-end">
-                    <Button type="button" variant="ghost" size="icon" onClick={() => removeSpreadCard(index)} aria-label="Remove card">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <label className="space-y-2 block lg:col-span-4">
-                    <span className="field-label">Interpretation</span>
-                    <Textarea value={item.interpretation} onChange={(event) => updateSpreadCard(index, { interpretation: event.target.value })} />
-                  </label>
-                </CardContent>
-              </Card>
-            ))}
+                    <label className="space-y-2 block lg:col-span-4">
+                      <span className="field-label">Interpretation</span>
+                      <Textarea value={item.interpretation} onChange={(event) => updateSpreadCard(index, { interpretation: event.target.value })} />
+                    </label>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           <div className="flex justify-end">

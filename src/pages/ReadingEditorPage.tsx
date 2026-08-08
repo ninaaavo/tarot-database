@@ -1,5 +1,5 @@
 import { Plus, Save, Search, Trash2 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,13 +37,11 @@ export function ReadingEditorPage() {
   const [form, setForm] = useState({ title: "", date: today, question: "", overall_notes: "" });
   const [spreadCards, setSpreadCards] = useState<SpreadCardForm[]>([blankSpreadCard()]);
   const [activeCardSearchIndex, setActiveCardSearchIndex] = useState<number | null>(null);
+  const [highlightedCardOptionIndex, setHighlightedCardOptionIndex] = useState(0);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    void listCardsWithNotes().then((result) => {
-      setCards(result);
-      if (!id && result[0]) setSpreadCards([blankSpreadCard(result[0].id, result[0].name)]);
-    });
+    void listCardsWithNotes().then(setCards);
   }, [id]);
 
   useEffect(() => {
@@ -73,7 +71,7 @@ export function ReadingEditorPage() {
   }
 
   function addSpreadCard() {
-    setSpreadCards((current) => [...current, blankSpreadCard(cards[0]?.id ?? "", cards[0]?.name ?? "")]);
+    setSpreadCards((current) => [...current, blankSpreadCard()]);
   }
 
   function removeSpreadCard(index: number) {
@@ -87,11 +85,48 @@ export function ReadingEditorPage() {
   function updateCardSearch(index: number, value: string) {
     const exactMatch = cards.find((card) => card.name.toLowerCase() === value.trim().toLowerCase());
     updateSpreadCard(index, { card_search: value, card_id: exactMatch?.id ?? "" });
+    setActiveCardSearchIndex(index);
+    setHighlightedCardOptionIndex(0);
   }
 
   function selectCard(index: number, card: CardWithNotes) {
     updateSpreadCard(index, { card_id: card.id, card_search: card.name });
     setActiveCardSearchIndex(null);
+    setHighlightedCardOptionIndex(0);
+  }
+
+  function handleCardSearchKeyDown(index: number, options: CardWithNotes[], event: KeyboardEvent<HTMLInputElement>) {
+    if (!["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(event.key)) return;
+
+    if (event.key === "Escape") {
+      setActiveCardSearchIndex(null);
+      setHighlightedCardOptionIndex(0);
+      return;
+    }
+
+    if (!options.length) {
+      if (event.key === "Enter") event.preventDefault();
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveCardSearchIndex(index);
+      setHighlightedCardOptionIndex((current) => (current + 1) % options.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveCardSearchIndex(index);
+      setHighlightedCardOptionIndex((current) => (current - 1 + options.length) % options.length);
+      return;
+    }
+
+    if (event.key === "Enter" && activeCardSearchIndex === index) {
+      event.preventDefault();
+      selectCard(index, options[highlightedCardOptionIndex] ?? options[0]);
+    }
   }
 
   function getSelectedCard(item: SpreadCardForm) {
@@ -177,6 +212,8 @@ export function ReadingEditorPage() {
             {spreadCards.map((item, index) => {
               const selectedCard = getSelectedCard(item);
               const meaningNote = selectedCard ? getMeaningNote(selectedCard, item.orientation) : null;
+              const cardOptions = getCardOptions(item);
+              const activeOptionId = `card-option-${index}-${highlightedCardOptionIndex}`;
 
               return (
                 <Card key={index}>
@@ -196,21 +233,39 @@ export function ReadingEditorPage() {
                         <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           className="pl-9"
-                          placeholder="Search cards"
+                          placeholder="Pick a card..."
                           required
+                          role="combobox"
+                          aria-expanded={activeCardSearchIndex === index}
+                          aria-controls={`card-options-${index}`}
+                          aria-activedescendant={activeCardSearchIndex === index && cardOptions.length ? activeOptionId : undefined}
                           value={item.card_search}
                           onChange={(event) => updateCardSearch(index, event.target.value)}
-                          onFocus={() => setActiveCardSearchIndex(index)}
+                          onFocus={() => {
+                            setActiveCardSearchIndex(index);
+                            setHighlightedCardOptionIndex(0);
+                          }}
                           onBlur={() => setActiveCardSearchIndex(null)}
+                          onKeyDown={(event) => handleCardSearchKeyDown(index, cardOptions, event)}
                         />
                         {activeCardSearchIndex === index && (
-                          <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-auto rounded-md border bg-card py-1 shadow-lg">
-                            {getCardOptions(item).length ? (
-                              getCardOptions(item).map((card) => (
+                          <div
+                            id={`card-options-${index}`}
+                            role="listbox"
+                            className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-auto rounded-md border bg-card py-1 shadow-lg"
+                          >
+                            {cardOptions.length ? (
+                              cardOptions.map((card, optionIndex) => (
                                 <button
                                   key={card.id}
+                                  id={`card-option-${index}-${optionIndex}`}
                                   type="button"
-                                  className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                                  role="option"
+                                  aria-selected={optionIndex === highlightedCardOptionIndex}
+                                  className={`flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none ${
+                                    optionIndex === highlightedCardOptionIndex ? "bg-accent" : ""
+                                  }`}
+                                  onMouseEnter={() => setHighlightedCardOptionIndex(optionIndex)}
                                   onMouseDown={(event) => event.preventDefault()}
                                   onClick={() => selectCard(index, card)}
                                 >

@@ -18,7 +18,7 @@ type SpreadCardForm = {
 };
 
 const today = new Date().toISOString().slice(0, 10);
-const meaningFallbackCategories = ["Meaning", "Reversed Meaning", "Suggestion / Advice", "Action"];
+const meaningFallbackCategories = ["Meaning", "Reversed Meaning", "Action", "Reversed Action", "Outcome", "Reversed Outcome"];
 
 function blankSpreadCard(cardId = "", cardSearch = ""): SpreadCardForm {
   return {

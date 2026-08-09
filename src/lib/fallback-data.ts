@@ -46,9 +46,14 @@ function minorImageUrl(suit: string, rankIndex: number) {
 export const noteCategories = [
   "Meaning",
   "Action",
-  "Suggestion / Advice",
+  "Strength",
+  "Weakness",
   "Outcome",
   "Reversed Meaning",
+  "Reversed Action",
+  "Reversed Strength",
+  "Reversed Weakness",
+  "Reversed Outcome",
   "Personal Notes",
 ];
 

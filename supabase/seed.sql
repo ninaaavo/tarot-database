@@ -118,9 +118,14 @@ with categories(category) as (
   values
     ('Meaning'),
     ('Action'),
-    ('Suggestion / Advice'),
+    ('Strength'),
+    ('Weakness'),
     ('Outcome'),
     ('Reversed Meaning'),
+    ('Reversed Action'),
+    ('Reversed Strength'),
+    ('Reversed Weakness'),
+    ('Reversed Outcome'),
     ('Personal Notes')
 )
 insert into public.card_notes (card_id, category, content)

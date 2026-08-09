@@ -6,7 +6,7 @@ import { cardSlug, listCardsWithNotes } from "@/lib/repository";
 import { cn } from "@/lib/utils";
 import type { CardWithNotes } from "@/types/database";
 
-const previewCategories = ["Meaning", "Action", "Suggestion / Advice", "Reversed Meaning"];
+const previewCategories = ["Meaning", "Action", "Strength", "Weakness", "Outcome", "Reversed Meaning"];
 const previewWidth = 288;
 const previewGap = 12;
 

@@ -9,6 +9,16 @@ import { getCard, getCardReadingHistory, noteCategories, saveCardNotes, upsertCa
 import { formatDate } from "@/lib/utils";
 import type { CardReadingHistoryItem, CardWithNotes } from "@/types/database";
 
+const uprightNoteCategories = ["Meaning", "Action", "Strength", "Weakness", "Outcome"];
+const reversedNoteCategories = [
+  "Reversed Meaning",
+  "Reversed Action",
+  "Reversed Strength",
+  "Reversed Weakness",
+  "Reversed Outcome",
+];
+const standaloneNoteCategories = ["Personal Notes"];
+
 export function CardDetailPage() {
   const { id } = useParams();
   const [card, setCard] = useState<CardWithNotes | null>(null);
@@ -104,6 +114,33 @@ export function CardDetailPage() {
       ),
     [card],
   );
+
+  function renderEditableNote(category: string) {
+    return (
+      <label className="space-y-2 block" key={category}>
+        <span className="field-label">{category}</span>
+        <Textarea
+          value={notes[category] ?? ""}
+          onChange={(event) => setNotes({ ...notes, [category]: event.target.value })}
+        />
+      </label>
+    );
+  }
+
+  function renderReadOnlyNote(category: string) {
+    return (
+      <section className="space-y-2" key={category}>
+        <h3 className="field-label">{category}</h3>
+        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+          {readOnlyNotes[category] || "No notes yet."}
+        </p>
+      </section>
+    );
+  }
+
+  function renderNote(category: string) {
+    return isEditing ? renderEditableNote(category) : renderReadOnlyNote(category);
+  }
 
   if (!card) {
     return (
@@ -204,25 +241,16 @@ export function CardDetailPage() {
             <CardHeader>
               <CardTitle>Interpretations</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              {isEditing
-                ? noteCategories.map((category) => (
-                    <label className="space-y-2 block" key={category}>
-                      <span className="field-label">{category}</span>
-                      <Textarea
-                        value={notes[category] ?? ""}
-                        onChange={(event) => setNotes({ ...notes, [category]: event.target.value })}
-                      />
-                    </label>
-                  ))
-                : noteCategories.map((category) => (
-                    <section className="space-y-2" key={category}>
-                      <h3 className="field-label">{category}</h3>
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                        {readOnlyNotes[category] || "No notes yet."}
-                      </p>
-                    </section>
-                  ))}
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-4">
+                  {uprightNoteCategories.map(renderNote)}
+                </div>
+                <div className="space-y-4">
+                  {reversedNoteCategories.map(renderNote)}
+                </div>
+              </div>
+              {standaloneNoteCategories.map(renderNote)}
             </CardContent>
           </Card>
           {(isEditing || status) && (

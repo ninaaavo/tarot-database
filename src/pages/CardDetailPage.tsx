@@ -1,5 +1,5 @@
-import { Edit, Save, X } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Edit, Save } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +31,7 @@ export function CardDetailPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [isEditing, setIsEditing] = useState(false);
   const [status, setStatus] = useState("");
+  const lastSavedNotes = useRef("");
 
   useEffect(() => {
     if (!id) return;
@@ -48,16 +49,53 @@ export function CardDetailPage() {
       number: result.number?.toString() ?? "",
       image_url: result.image_url ?? "",
     });
-    setNotes(
-      Object.fromEntries(
-        noteCategories.map((category) => [
-          category,
-          result.card_notes.find((note) => note.category === category)?.content ?? "",
-        ]),
-      ),
+    const nextNotes = Object.fromEntries(
+      noteCategories.map((category) => [
+        category,
+        result.card_notes.find((note) => note.category === category)?.content ?? "",
+      ]),
     );
+    setNotes(nextNotes);
+    lastSavedNotes.current = JSON.stringify(nextNotes);
     setHistory(await getCardReadingHistory(result.id));
   }
+
+  useEffect(() => {
+    if (!card || !isEditing) return;
+
+    const notesSignature = JSON.stringify(notes);
+    if (notesSignature === lastSavedNotes.current) return;
+
+    setStatus("Saving...");
+    const timeout = window.setTimeout(() => {
+      void saveCardNotes(card.id, notes)
+        .then(() => {
+          lastSavedNotes.current = notesSignature;
+          setCard((current) => {
+            if (!current) return current;
+
+            return {
+              ...current,
+              card_notes: noteCategories.map((category) => {
+                const existingNote = current.card_notes.find((note) => note.category === category);
+                return {
+                  id: existingNote?.id ?? `${current.id}-${category.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+                  card_id: current.id,
+                  category,
+                  content: notes[category] ?? "",
+                };
+              }),
+            };
+          });
+          setStatus("Saved");
+        })
+        .catch((error) => {
+          setStatus(error instanceof Error ? error.message : "Unable to autosave.");
+        });
+    }, 700);
+
+    return () => window.clearTimeout(timeout);
+  }, [card, isEditing, notes]);
 
   function resetForm(nextCard = card) {
     if (!nextCard) return;
@@ -68,26 +106,20 @@ export function CardDetailPage() {
       number: nextCard.number?.toString() ?? "",
       image_url: nextCard.image_url ?? "",
     });
-    setNotes(
-      Object.fromEntries(
-        noteCategories.map((category) => [
-          category,
-          nextCard.card_notes.find((note) => note.category === category)?.content ?? "",
-        ]),
-      ),
+    const nextNotes = Object.fromEntries(
+      noteCategories.map((category) => [
+        category,
+        nextCard.card_notes.find((note) => note.category === category)?.content ?? "",
+      ]),
     );
+    setNotes(nextNotes);
+    lastSavedNotes.current = JSON.stringify(nextNotes);
   }
 
   function handleEdit() {
     resetForm();
     setStatus("");
     setIsEditing(true);
-  }
-
-  function handleCancel() {
-    resetForm();
-    setStatus("");
-    setIsEditing(false);
   }
 
   async function handleSave(event: FormEvent) {
@@ -174,12 +206,7 @@ export function CardDetailPage() {
           <p className="text-sm text-muted-foreground">{card.arcana}{card.suit ? ` / ${card.suit}` : ""}</p>
         </div>
         <div className="flex gap-2">
-          {isEditing ? (
-            <Button type="button" variant="outline" onClick={handleCancel}>
-              <X className="h-4 w-4" />
-              Cancel
-            </Button>
-          ) : (
+          {!isEditing && (
             <Button type="button" variant="outline" onClick={handleEdit}>
               <Edit className="h-4 w-4" />
               Edit

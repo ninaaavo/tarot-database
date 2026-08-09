@@ -4,11 +4,10 @@ import {
   List,
   ListOrdered,
   Plus,
-  Save,
   Trash2,
   Underline,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,6 +39,10 @@ function toPlainText(value: string) {
   return document.body.textContent?.replace(/\s+/g, " ").trim() ?? "";
 }
 
+function getNoteSignature(title: string, body: string) {
+  return JSON.stringify({ title, body });
+}
+
 export function GeneralNotesPage() {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [entries, setEntries] = useState<GeneralNoteEntry[]>([]);
@@ -48,6 +51,7 @@ export function GeneralNotesPage() {
   const [body, setBody] = useState(blankBody);
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const lastSavedSignature = useRef("");
 
   const activeEntry = entries.find((entry) => entry.id === activeId) ?? null;
 
@@ -69,6 +73,7 @@ export function GeneralNotesPage() {
     setActiveId(entry?.id ?? null);
     setTitle(entry?.title ?? "");
     setBody(entry?.body ?? blankBody);
+    lastSavedSignature.current = getNoteSignature(entry?.title ?? "", entry?.body ?? blankBody);
     setStatus("");
     if (editorRef.current) {
       editorRef.current.innerHTML = entry?.body ?? blankBody;
@@ -114,16 +119,37 @@ export function GeneralNotesPage() {
     }
   }
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    const savedEntry = await saveGeneralNoteEntry({
-      id: activeEntry?.id,
-      title: title.trim() || "Untitled Note",
-      body,
-    });
-    setStatus("Saved");
-    await loadEntries(savedEntry.id);
-  }
+  const autosaveSignature = useMemo(() => getNoteSignature(title, body), [title, body]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!title.trim() && !toPlainText(body)) return;
+    if (autosaveSignature === lastSavedSignature.current) return;
+
+    setStatus("Saving...");
+    const timeout = window.setTimeout(() => {
+      void saveGeneralNoteEntry({
+        id: activeEntry?.id,
+        title: title.trim() || "Untitled Note",
+        body,
+      })
+        .then((savedEntry) => {
+          lastSavedSignature.current = getNoteSignature(savedEntry.title, savedEntry.body);
+          setActiveId(savedEntry.id);
+          setEntries((current) =>
+            [savedEntry, ...current.filter((entry) => entry.id !== savedEntry.id)].sort((a, b) =>
+              b.updated_at.localeCompare(a.updated_at),
+            ),
+          );
+          setStatus("Saved");
+        })
+        .catch((error) => {
+          setStatus(error instanceof Error ? error.message : "Unable to autosave.");
+        });
+    }, 700);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeEntry?.id, autosaveSignature, body, isLoading, title]);
 
   async function handleDelete() {
     if (!activeEntry || !window.confirm("Delete this note?")) return;
@@ -182,7 +208,7 @@ export function GeneralNotesPage() {
           </CardContent>
         </Card>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>{activeEntry ? "Edit Note" : "New Note"}</CardTitle>
@@ -240,15 +266,11 @@ export function GeneralNotesPage() {
                       Delete
                     </Button>
                   )}
-                  <Button type="submit">
-                    <Save className="h-4 w-4" />
-                    Save Note
-                  </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </form>
+        </div>
       </div>
     </main>
   );

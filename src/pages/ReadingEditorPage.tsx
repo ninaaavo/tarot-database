@@ -1,5 +1,5 @@
 import { Plus, Save, Search, Trash2 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,10 @@ function blankSpreadCard(cardId = "", cardSearch = ""): SpreadCardForm {
   };
 }
 
+function getReadingSignature(form: { title: string; date: string; question: string; overall_notes: string }, spreadCards: SpreadCardForm[]) {
+  return JSON.stringify({ form, spreadCards });
+}
+
 export function ReadingEditorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -38,33 +42,76 @@ export function ReadingEditorPage() {
   const [spreadCards, setSpreadCards] = useState<SpreadCardForm[]>([blankSpreadCard()]);
   const [activeCardSearchIndex, setActiveCardSearchIndex] = useState<number | null>(null);
   const [highlightedCardOptionIndex, setHighlightedCardOptionIndex] = useState(0);
+  const [savedReadingId, setSavedReadingId] = useState<string | null>(id ?? null);
+  const [isReadyToAutosave, setIsReadyToAutosave] = useState(!id);
   const [status, setStatus] = useState("");
+  const lastSavedSignature = useRef("");
 
   useEffect(() => {
     void listCardsWithNotes().then(setCards);
   }, [id]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setSavedReadingId(null);
+      setIsReadyToAutosave(true);
+      return;
+    }
+
+    setSavedReadingId(id);
+    setIsReadyToAutosave(false);
     void getReading(id).then((reading) => {
       if (!reading) return;
-      setForm({
+      const nextForm = {
         title: reading.title,
         date: reading.date,
         question: reading.question ?? "",
         overall_notes: reading.overall_notes ?? "",
-      });
-      setSpreadCards(
-        reading.reading_cards.map((item) => ({
+      };
+      const nextSpreadCards = reading.reading_cards.map((item) => ({
           position_name: item.position_name,
           card_id: item.card_id,
           card_search: item.cards.name,
           orientation: item.orientation,
           interpretation: item.interpretation ?? "",
-        })),
-      );
+        }));
+      setForm(nextForm);
+      setSpreadCards(nextSpreadCards);
+      lastSavedSignature.current = getReadingSignature(nextForm, nextSpreadCards);
+      setIsReadyToAutosave(true);
     });
   }, [id]);
+
+  const autosaveSignature = useMemo(() => getReadingSignature(form, spreadCards), [form, spreadCards]);
+
+  useEffect(() => {
+    if (!isReadyToAutosave) return;
+    if (autosaveSignature === lastSavedSignature.current) return;
+
+    const draft = buildReadingDraft();
+    if (!draft.canSave) {
+      if (form.title.trim()) setStatus(draft.message);
+      return;
+    }
+
+    setStatus("Saving...");
+    const timeout = window.setTimeout(() => {
+      void saveReading(draft.input, draft.cards, savedReadingId ?? undefined)
+        .then((reading) => {
+          lastSavedSignature.current = autosaveSignature;
+          setSavedReadingId(reading.id);
+          setStatus("Saved");
+          if (!savedReadingId) {
+            navigate(`/readings/${reading.id}/edit`, { replace: true });
+          }
+        })
+        .catch((error) => {
+          setStatus(error instanceof Error ? error.message : "Unable to autosave.");
+        });
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [autosaveSignature, form.title, isReadyToAutosave, navigate, savedReadingId]);
 
   function updateSpreadCard(index: number, value: Partial<SpreadCardForm>) {
     setSpreadCards((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...value } : item)));
@@ -143,22 +190,25 @@ export function ReadingEditorPage() {
       .find((note) => Boolean(note));
   }
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  function buildReadingDraft() {
     const hasUnselectedCard = spreadCards.some((item) => item.position_name.trim() && !item.card_id);
     if (hasUnselectedCard) {
-      setStatus("Choose a card from the search results before saving.");
-      return;
+      return { canSave: false as const, message: "Choose a card from the search results before saving." };
     }
 
-    const reading = await saveReading(
-      {
+    if (!form.title.trim() || !form.date) {
+      return { canSave: false as const, message: "Add a title and date to autosave." };
+    }
+
+    return {
+      canSave: true as const,
+      input: {
         title: form.title,
         date: form.date,
         question: form.question || null,
         overall_notes: form.overall_notes || null,
       },
-      spreadCards
+      cards: spreadCards
         .filter((item) => item.card_id && item.position_name)
         .map((item, index) => ({
           card_id: item.card_id,
@@ -167,8 +217,20 @@ export function ReadingEditorPage() {
           orientation: item.orientation,
           interpretation: item.interpretation || null,
         })),
-      id,
-    );
+    };
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const draft = buildReadingDraft();
+    if (!draft.canSave) {
+      setStatus(draft.message);
+      return;
+    }
+
+    const reading = await saveReading(draft.input, draft.cards, savedReadingId ?? undefined);
+    lastSavedSignature.current = autosaveSignature;
+    setSavedReadingId(reading.id);
     setStatus("Saved");
     navigate(`/readings/${reading.id}`);
   }

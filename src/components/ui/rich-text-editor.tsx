@@ -1,6 +1,4 @@
-import { Bold, Italic, List, ListOrdered, Underline } from "lucide-react";
 import { KeyboardEvent, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type RichTextEditorProps = {
@@ -8,14 +6,6 @@ type RichTextEditorProps = {
   value: string;
   onChange: (value: string) => void;
 };
-
-const toolbarButtons = [
-  { command: "bold", label: "Bold", shortcut: "Ctrl+B", icon: Bold },
-  { command: "italic", label: "Italic", shortcut: "Ctrl+I", icon: Italic },
-  { command: "underline", label: "Underline", shortcut: "Ctrl+U", icon: Underline },
-  { command: "insertUnorderedList", label: "Bulleted list", shortcut: "Ctrl+Shift+8", icon: List },
-  { command: "insertOrderedList", label: "Numbered list", shortcut: "Ctrl+Shift+7", icon: ListOrdered },
-];
 
 export function sanitizeRichTextHtml(value: string) {
   const template = document.createElement("template");
@@ -85,33 +75,17 @@ export function RichTextEditor({ className, value, onChange }: RichTextEditorPro
     } else if (key === "u") {
       event.preventDefault();
       runFormat("underline");
-    } else if (event.shiftKey && key === "7") {
+    } else if (event.shiftKey && event.code === "Digit7") {
       event.preventDefault();
       runFormat("insertOrderedList");
-    } else if (event.shiftKey && key === "8") {
+    } else if (event.shiftKey && event.code === "Digit8") {
       event.preventDefault();
       runFormat("insertUnorderedList");
     }
   }
 
   return (
-    <div className="group rounded-md border border-input bg-card focus-within:ring-2 focus-within:ring-ring">
-      <div className="hidden flex-wrap gap-1 border-b bg-background/80 p-1 group-focus-within:flex">
-        {toolbarButtons.map(({ command, label, shortcut, icon: Icon }) => (
-          <Button
-            aria-label={label}
-            key={command}
-            onClick={() => runFormat(command)}
-            onMouseDown={(event) => event.preventDefault()}
-            size="icon"
-            title={`${label} (${shortcut})`}
-            type="button"
-            variant="ghost"
-          >
-            <Icon className="h-4 w-4" />
-          </Button>
-        ))}
-      </div>
+    <div className="rounded-md border border-input bg-card focus-within:ring-2 focus-within:ring-ring">
       <div
         className={cn("rich-text-editor min-h-28 w-full px-3 py-2 text-sm outline-none", className)}
         contentEditable

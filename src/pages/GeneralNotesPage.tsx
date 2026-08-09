@@ -105,10 +105,10 @@ export function GeneralNotesPage() {
     } else if (key === "u") {
       event.preventDefault();
       runFormat("underline");
-    } else if (event.shiftKey && key === "7") {
+    } else if (event.shiftKey && event.code === "Digit7") {
       event.preventDefault();
       runFormat("insertOrderedList");
-    } else if (event.shiftKey && key === "8") {
+    } else if (event.shiftKey && event.code === "Digit8") {
       event.preventDefault();
       runFormat("insertUnorderedList");
     }

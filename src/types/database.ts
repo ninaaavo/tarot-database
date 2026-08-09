@@ -29,6 +29,22 @@ export type Database = {
         Update: Partial<Omit<Reading, "id" | "created_at">>;
         Relationships: [];
       };
+      general_notes: {
+        Row: GeneralNote;
+        Insert: Omit<GeneralNote, "updated_at"> & { updated_at?: string };
+        Update: Partial<Omit<GeneralNote, "id">>;
+        Relationships: [];
+      };
+      general_note_entries: {
+        Row: GeneralNoteEntry;
+        Insert: Omit<GeneralNoteEntry, "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<GeneralNoteEntry, "id" | "created_at" | "updated_at">>;
+        Relationships: [];
+      };
       reading_cards: {
         Row: ReadingCard;
         Insert: Omit<ReadingCard, "id"> & { id?: string };
@@ -81,6 +97,20 @@ export type Reading = {
   question: string | null;
   overall_notes: string | null;
   created_at: string;
+};
+
+export type GeneralNote = {
+  id: string;
+  content: string;
+  updated_at: string;
+};
+
+export type GeneralNoteEntry = {
+  id: string;
+  title: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Orientation = "upright" | "reversed";

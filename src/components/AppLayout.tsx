@@ -1,4 +1,4 @@
-import { BookOpen, Library, Plus } from "lucide-react";
+import { BookOpen, FileText, Library, Plus } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { usesLocalFallback } from "@/lib/repository";
 import { cn } from "@/lib/utils";
@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { to: "/", label: "Deck", icon: Library },
   { to: "/readings", label: "Readings", icon: BookOpen },
+  { to: "/notes", label: "Notes", icon: FileText },
   { to: "/readings/new", label: "New", icon: Plus },
 ];
 

@@ -46,4 +46,34 @@
   .field-label {
     @apply text-sm font-medium text-foreground;
   }
+
+  .rich-text-editor ul {
+    @apply my-3 list-disc pl-6;
+  }
+
+  .rich-text-editor ol {
+    @apply my-3 list-decimal pl-6;
+  }
+
+  .rich-text-editor li {
+    @apply my-1;
+  }
+
+  .rich-text-editor p {
+    @apply my-3;
+  }
+
+  .rich-text-editor b,
+  .rich-text-editor strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .rich-text-editor i,
+  .rich-text-editor em {
+    @apply italic;
+  }
+
+  .rich-text-editor u {
+    text-underline-offset: 0.18em;
+  }
 }

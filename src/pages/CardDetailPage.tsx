@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor, sanitizeRichTextHtml } from "@/components/ui/rich-text-editor";
 import { getCard, getCardReadingHistory, noteCategories, saveCardNotes, upsertCard } from "@/lib/repository";
 import { formatDate } from "@/lib/utils";
 import type { CardReadingHistoryItem, CardWithNotes } from "@/types/database";
@@ -18,6 +18,10 @@ const reversedNoteCategories = [
   "Reversed Outcome",
 ];
 const standaloneNoteCategories = ["Personal Notes"];
+
+function hasHtml(value: string) {
+  return /<[a-z][\s\S]*>/i.test(value);
+}
 
 export function CardDetailPage() {
   const { id } = useParams();
@@ -119,21 +123,32 @@ export function CardDetailPage() {
     return (
       <label className="space-y-2 block" key={category}>
         <span className="field-label">{category}</span>
-        <Textarea
+        <RichTextEditor
           value={notes[category] ?? ""}
-          onChange={(event) => setNotes({ ...notes, [category]: event.target.value })}
+          onChange={(value) => setNotes({ ...notes, [category]: value })}
         />
       </label>
     );
   }
 
   function renderReadOnlyNote(category: string) {
+    const noteContent = readOnlyNotes[category] ?? "";
+
     return (
       <section className="space-y-2" key={category}>
         <h3 className="field-label">{category}</h3>
-        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-          {readOnlyNotes[category] || "No notes yet."}
-        </p>
+        {noteContent ? (
+          hasHtml(noteContent) ? (
+            <div
+              className="rich-text-editor text-sm leading-6 text-muted-foreground"
+              dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(noteContent) }}
+            />
+          ) : (
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{noteContent}</p>
+          )
+        ) : (
+          <p className="text-sm leading-6 text-muted-foreground">No notes yet.</p>
+        )}
       </section>
     );
   }

@@ -5,6 +5,8 @@ import type {
   CardNote,
   CardReadingHistoryItem,
   CardWithNotes,
+  GeneralNote,
+  GeneralNoteEntry,
   Reading,
   ReadingCard,
   ReadingCardWithCard,
@@ -14,6 +16,7 @@ import type {
 type CardInput = Omit<Card, "id"> & { id?: string };
 type ReadingInput = Omit<Reading, "id" | "created_at">;
 type ReadingCardInput = Omit<ReadingCard, "id" | "reading_id">;
+type GeneralNoteEntryInput = Pick<GeneralNoteEntry, "title" | "body"> & { id?: string };
 
 const storageKey = "tarot-database-mvp";
 const rankWords: Record<number, string> = {
@@ -36,6 +39,8 @@ const rankWords: Record<number, string> = {
 type LocalStore = {
   cards: Card[];
   card_notes: CardNote[];
+  general_notes: GeneralNote[];
+  general_note_entries: GeneralNoteEntry[];
   readings: Reading[];
   reading_cards: ReadingCard[];
 };
@@ -46,12 +51,37 @@ function getLocalStore(): LocalStore {
     return {
       cards: fallbackCards,
       card_notes: fallbackNotes,
+      general_notes: [],
+      general_note_entries: [],
       readings: fallbackReadings,
       reading_cards: fallbackReadingCards,
     };
   }
 
-  return JSON.parse(raw) as LocalStore;
+  const store = JSON.parse(raw) as Partial<LocalStore>;
+  return {
+    cards: store.cards ?? fallbackCards,
+    card_notes: store.card_notes ?? fallbackNotes,
+    general_notes: store.general_notes ?? [],
+    general_note_entries: store.general_note_entries ?? migrateGeneralNotes(store.general_notes ?? []),
+    readings: store.readings ?? fallbackReadings,
+    reading_cards: store.reading_cards ?? fallbackReadingCards,
+  };
+}
+
+function migrateGeneralNotes(notes: GeneralNote[]): GeneralNoteEntry[] {
+  const note = notes.find((item) => item.id === "general" && item.content.trim());
+  if (!note) return [];
+
+  return [
+    {
+      id: "general-migrated",
+      title: "Untitled Note",
+      body: note.content,
+      created_at: note.updated_at,
+      updated_at: note.updated_at,
+    },
+  ];
 }
 
 function saveLocalStore(store: LocalStore) {
@@ -224,6 +254,8 @@ export async function deleteCard(cardId: string) {
   saveLocalStore({
     cards: store.cards.filter((card) => card.id !== cardId),
     card_notes: store.card_notes.filter((note) => note.card_id !== cardId),
+    general_notes: store.general_notes,
+    general_note_entries: store.general_note_entries,
     readings: store.readings,
     reading_cards: store.reading_cards.filter((item) => item.card_id !== cardId),
   });
@@ -269,6 +301,100 @@ export async function getCardReadingHistory(cardId: string): Promise<CardReading
     .filter((item) => item.card_id === cardId)
     .map((item) => ({ ...item, readings: store.readings.find((reading) => reading.id === item.reading_id)! }))
     .filter((item) => item.readings);
+}
+
+export async function getGeneralNote(): Promise<GeneralNote> {
+  if (supabase) {
+    const { data, error } = await supabase.from("general_notes").select("*").eq("id", "general").maybeSingle();
+    if (error) throw error;
+    return data ?? { id: "general", content: "", updated_at: new Date().toISOString() };
+  }
+
+  const note = getLocalStore().general_notes.find((item) => item.id === "general");
+  return note ?? { id: "general", content: "", updated_at: new Date().toISOString() };
+}
+
+export async function saveGeneralNote(content: string): Promise<GeneralNote> {
+  const note = { id: "general", content, updated_at: new Date().toISOString() };
+
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("general_notes")
+      .upsert(note, { onConflict: "id" })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  const store = getLocalStore();
+  saveLocalStore({ ...store, general_notes: [note] });
+  return note;
+}
+
+function sortGeneralNoteEntries(entries: GeneralNoteEntry[]) {
+  return [...entries].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+}
+
+export async function listGeneralNoteEntries(): Promise<GeneralNoteEntry[]> {
+  if (supabase) {
+    const { data, error } = await supabase.from("general_note_entries").select("*").order("updated_at", { ascending: false });
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  return sortGeneralNoteEntries(getLocalStore().general_note_entries);
+}
+
+export async function saveGeneralNoteEntry(input: GeneralNoteEntryInput): Promise<GeneralNoteEntry> {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("general_note_entries")
+      .upsert(
+        {
+          id: input.id,
+          title: input.title,
+          body: input.body,
+        },
+        { onConflict: "id" },
+      )
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  const store = getLocalStore();
+  const existingNote = input.id ? store.general_note_entries.find((item) => item.id === input.id) : null;
+  const note: GeneralNoteEntry = {
+    id: input.id ?? id("general-note"),
+    title: input.title,
+    body: input.body,
+    created_at: existingNote?.created_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  saveLocalStore({
+    ...store,
+    general_note_entries: sortGeneralNoteEntries([
+      ...store.general_note_entries.filter((item) => item.id !== note.id),
+      note,
+    ]),
+  });
+  return note;
+}
+
+export async function deleteGeneralNoteEntry(noteId: string) {
+  if (supabase) {
+    const { error } = await supabase.from("general_note_entries").delete().eq("id", noteId);
+    if (error) throw error;
+    return;
+  }
+
+  const store = getLocalStore();
+  saveLocalStore({
+    ...store,
+    general_note_entries: store.general_note_entries.filter((note) => note.id !== noteId),
+  });
 }
 
 export async function listReadings(): Promise<Array<Reading & { card_count: number }>> {

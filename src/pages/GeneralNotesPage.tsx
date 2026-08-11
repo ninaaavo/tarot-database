@@ -5,6 +5,7 @@ import {
   List,
   ListOrdered,
   Plus,
+  Save,
   Trash2,
   Underline,
 } from "lucide-react";
@@ -55,6 +56,7 @@ export function GeneralNotesPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const lastSavedSignature = useRef("");
+  const autosaveTimeout = useRef<number | null>(null);
 
   const activeEntry = entries.find((entry) => entry.id === activeId) ?? null;
 
@@ -135,8 +137,42 @@ export function GeneralNotesPage() {
     }
   }
 
+  async function saveNote(errorMessage = "Unable to save.") {
+    if (!title.trim() && !toPlainText(body) && !activeEntry) return;
+
+    setStatus("Saving...");
+    try {
+      const savedEntry = await saveGeneralNoteEntry({
+        id: activeEntry?.id,
+        title: title.trim() || "Untitled Note",
+        body,
+      });
+
+      lastSavedSignature.current = getNoteSignature(savedEntry.title, savedEntry.body);
+      setActiveId(savedEntry.id);
+      setEntries((current) =>
+        [savedEntry, ...current.filter((entry) => entry.id !== savedEntry.id)].sort((a, b) =>
+          b.updated_at.localeCompare(a.updated_at),
+        ),
+      );
+      setStatus("Saved");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : errorMessage);
+    }
+  }
+
+  function handleSave() {
+    if (autosaveTimeout.current) {
+      window.clearTimeout(autosaveTimeout.current);
+      autosaveTimeout.current = null;
+    }
+
+    void saveNote();
+  }
+
   const autosaveSignature = useMemo(() => getNoteSignature(title, body), [title, body]);
   const readOnlyBody = useMemo(() => sanitizeRichTextHtml(body), [body]);
+  const hasNoteContent = Boolean(title.trim() || toPlainText(body));
 
   useEffect(() => {
     if (isLoading) return;
@@ -144,29 +180,18 @@ export function GeneralNotesPage() {
     if (!title.trim() && !toPlainText(body)) return;
     if (autosaveSignature === lastSavedSignature.current) return;
 
-    setStatus("Saving...");
-    const timeout = window.setTimeout(() => {
-      void saveGeneralNoteEntry({
-        id: activeEntry?.id,
-        title: title.trim() || "Untitled Note",
-        body,
-      })
-        .then((savedEntry) => {
-          lastSavedSignature.current = getNoteSignature(savedEntry.title, savedEntry.body);
-          setActiveId(savedEntry.id);
-          setEntries((current) =>
-            [savedEntry, ...current.filter((entry) => entry.id !== savedEntry.id)].sort((a, b) =>
-              b.updated_at.localeCompare(a.updated_at),
-            ),
-          );
-          setStatus("Saved");
-        })
-        .catch((error) => {
-          setStatus(error instanceof Error ? error.message : "Unable to autosave.");
-        });
+    autosaveTimeout.current = window.setTimeout(() => {
+      void saveNote("Unable to autosave.").finally(() => {
+        autosaveTimeout.current = null;
+      });
     }, 700);
 
-    return () => window.clearTimeout(timeout);
+    return () => {
+      if (autosaveTimeout.current) {
+        window.clearTimeout(autosaveTimeout.current);
+        autosaveTimeout.current = null;
+      }
+    };
   }, [activeEntry?.id, autosaveSignature, body, isEditing, isLoading, title]);
 
   async function handleDelete() {
@@ -302,6 +327,12 @@ export function GeneralNotesPage() {
                 </p>
                 <div className="flex items-center gap-3">
                   {status && <span className="text-sm text-muted-foreground">{status}</span>}
+                  {isEditing && (
+                    <Button type="button" onClick={handleSave} disabled={!activeEntry && !hasNoteContent}>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </Button>
+                  )}
                   {activeEntry && (
                     <Button type="button" variant="destructive" onClick={handleDelete}>
                       <Trash2 className="h-4 w-4" />

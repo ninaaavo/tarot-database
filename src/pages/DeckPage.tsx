@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { FocusEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
+import { sanitizeRichTextHtml } from "@/components/ui/rich-text-editor";
 import { cardSlug, listCardsWithNotes } from "@/lib/repository";
 import { cn } from "@/lib/utils";
 import type { CardWithNotes } from "@/types/database";
@@ -16,6 +17,10 @@ function getPreviewNotes(card: CardWithNotes) {
   return previewCategories
     .map((category) => card.card_notes.find((note) => note.category === category && note.content.trim()))
     .filter((note) => Boolean(note));
+}
+
+function hasHtml(value: string) {
+  return /<[a-z][\s\S]*>/i.test(value);
 }
 
 export function DeckPage() {
@@ -96,7 +101,14 @@ export function DeckPage() {
               previewNotes.map((note) => (
                 <div key={note!.id}>
                   <p className="text-xs font-semibold uppercase text-muted-foreground">{note!.category}</p>
-                  <p className="mt-1 line-clamp-4 text-sm leading-5">{note!.content}</p>
+                  {hasHtml(note!.content) ? (
+                    <div
+                      className="rich-text-editor mt-1 line-clamp-4 text-sm leading-5"
+                      dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(note!.content) }}
+                    />
+                  ) : (
+                    <p className="mt-1 line-clamp-4 text-sm leading-5">{note!.content}</p>
+                  )}
                 </div>
               ))
             ) : (

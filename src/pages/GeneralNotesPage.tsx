@@ -1,5 +1,6 @@
 import {
   Bold,
+  Edit3,
   Italic,
   List,
   ListOrdered,
@@ -11,6 +12,7 @@ import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { sanitizeRichTextHtml } from "@/components/ui/rich-text-editor";
 import {
   deleteGeneralNoteEntry,
   listGeneralNoteEntries,
@@ -50,6 +52,7 @@ export function GeneralNotesPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(blankBody);
   const [status, setStatus] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const lastSavedSignature = useRef("");
 
@@ -58,6 +61,11 @@ export function GeneralNotesPage() {
   useEffect(() => {
     void loadEntries();
   }, []);
+
+  useEffect(() => {
+    if (!isEditing || !editorRef.current || document.activeElement === editorRef.current) return;
+    editorRef.current.innerHTML = body;
+  }, [body, isEditing]);
 
   async function loadEntries(nextActiveId?: string) {
     setIsLoading(true);
@@ -75,6 +83,7 @@ export function GeneralNotesPage() {
     setBody(entry?.body ?? blankBody);
     lastSavedSignature.current = getNoteSignature(entry?.title ?? "", entry?.body ?? blankBody);
     setStatus("");
+    setIsEditing(false);
     if (editorRef.current) {
       editorRef.current.innerHTML = entry?.body ?? blankBody;
     }
@@ -82,6 +91,12 @@ export function GeneralNotesPage() {
 
   function startNewEntry() {
     selectEntry(null);
+    setIsEditing(true);
+    window.setTimeout(() => editorRef.current?.focus(), 0);
+  }
+
+  function startEditing() {
+    setIsEditing(true);
     window.setTimeout(() => editorRef.current?.focus(), 0);
   }
 
@@ -91,6 +106,7 @@ export function GeneralNotesPage() {
   }
 
   function runFormat(command: string, value?: string) {
+    if (!isEditing) return;
     editorRef.current?.focus();
     document.execCommand(command, false, value);
     syncBodyFromEditor();
@@ -120,9 +136,11 @@ export function GeneralNotesPage() {
   }
 
   const autosaveSignature = useMemo(() => getNoteSignature(title, body), [title, body]);
+  const readOnlyBody = useMemo(() => sanitizeRichTextHtml(body), [body]);
 
   useEffect(() => {
     if (isLoading) return;
+    if (!isEditing) return;
     if (!title.trim() && !toPlainText(body)) return;
     if (autosaveSignature === lastSavedSignature.current) return;
 
@@ -149,7 +167,7 @@ export function GeneralNotesPage() {
     }, 700);
 
     return () => window.clearTimeout(timeout);
-  }, [activeEntry?.id, autosaveSignature, body, isLoading, title]);
+  }, [activeEntry?.id, autosaveSignature, body, isEditing, isLoading, title]);
 
   async function handleDelete() {
     if (!activeEntry || !window.confirm("Delete this note?")) return;
@@ -211,48 +229,72 @@ export function GeneralNotesPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>{activeEntry ? "Edit Note" : "New Note"}</CardTitle>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>{isEditing ? (activeEntry ? "Edit Note" : "New Note") : "Read Note"}</CardTitle>
+                {activeEntry && !isEditing && (
+                  <Button type="button" variant="outline" onClick={startEditing}>
+                    <Edit3 className="h-4 w-4" />
+                    Edit
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <label className="space-y-2 block">
-                <span className="field-label">Title</span>
-                <Input
-                  placeholder="Note title"
-                  value={title}
-                  onChange={(event) => {
-                    setTitle(event.target.value);
-                    setStatus("");
-                  }}
-                />
-              </label>
+              {isEditing ? (
+                <>
+                  <label className="space-y-2 block">
+                    <span className="field-label">Title</span>
+                    <Input
+                      placeholder="Note title"
+                      value={title}
+                      onChange={(event) => {
+                        setTitle(event.target.value);
+                        setStatus("");
+                      }}
+                    />
+                  </label>
 
-              <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
-                <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("bold")} aria-label="Bold" title="Bold (Ctrl+B)">
-                  <Bold className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("italic")} aria-label="Italic" title="Italic (Ctrl+I)">
-                  <Italic className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("underline")} aria-label="Underline" title="Underline (Ctrl+U)">
-                  <Underline className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("insertUnorderedList")} aria-label="Bulleted list" title="Bulleted list (Ctrl+Shift+8)">
-                  <List className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("insertOrderedList")} aria-label="Numbered list" title="Numbered list (Ctrl+Shift+7)">
-                  <ListOrdered className="h-4 w-4" />
-                </Button>
-              </div>
+                  <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
+                    <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("bold")} aria-label="Bold" title="Bold (Ctrl+B)">
+                      <Bold className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("italic")} aria-label="Italic" title="Italic (Ctrl+I)">
+                      <Italic className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("underline")} aria-label="Underline" title="Underline (Ctrl+U)">
+                      <Underline className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("insertUnorderedList")} aria-label="Bulleted list" title="Bulleted list (Ctrl+Shift+8)">
+                      <List className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => runFormat("insertOrderedList")} aria-label="Numbered list" title="Numbered list (Ctrl+Shift+7)">
+                      <ListOrdered className="h-4 w-4" />
+                    </Button>
+                  </div>
 
-              <div
-                className="rich-text-editor min-h-[480px] rounded-md border border-input bg-card px-4 py-3 text-base leading-7 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                contentEditable
-                onInput={syncBodyFromEditor}
-                onKeyDown={handleEditorKeyDown}
-                ref={editorRef}
-                role="textbox"
-                suppressContentEditableWarning
-              />
+                  <div
+                    className="rich-text-editor min-h-[480px] rounded-md border border-input bg-card px-4 py-3 text-base leading-7 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    contentEditable
+                    onInput={syncBodyFromEditor}
+                    onKeyDown={handleEditorKeyDown}
+                    ref={editorRef}
+                    role="textbox"
+                    suppressContentEditableWarning
+                  />
+                </>
+              ) : (
+                <article className="min-h-[480px] rounded-md border border-input bg-card px-4 py-4">
+                  <h3 className="text-2xl font-semibold">{title || "Untitled Note"}</h3>
+                  {toPlainText(body) ? (
+                    <div
+                      className="rich-text-editor mt-4 text-base leading-7 text-foreground"
+                      dangerouslySetInnerHTML={{ __html: readOnlyBody }}
+                    />
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">No body text yet.</p>
+                  )}
+                </article>
+              )}
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground">
